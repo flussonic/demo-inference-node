@@ -8,6 +8,12 @@ from gi.repository import Gst
 from gi.repository import GLib
 import datetime as dt
 import numpy as np
+import cv2
+
+detector = cv2.QRCodeDetector()
+qr_codes = {}
+
+
 Gst.init(None)
 
 NTP_EPOCH_DELTA=2208988800
@@ -43,13 +49,19 @@ def on_new_sample(appsink):
 			tsmeta = buffer.get_reference_timestamp_meta(None)
 			ntp = tsmeta.timestamp
 			d = dt.datetime.fromtimestamp(ntp/1e9 - NTP_EPOCH_DELTA, tz=dt.UTC)
-			print("Timestamp:", d)
-			arr = np.ndarray(
+			# print("Timestamp:", d)
+			img = np.ndarray(
 	            (caps.get_structure(0).get_value('height'),
 	             caps.get_structure(0).get_value('width'),
 	             3),
 	            buffer=buffer.extract_dup(0, buffer.get_size()),
 	            dtype=np.uint8)
+
+			data, bbox, _ = detector.detectAndDecode(img)
+			print("%s - %s - %s" % (d,data,bbox))
+			if data and data not in qr_codes:
+				qr_codes[data] = (data, d)
+				print(data,d)
 	return Gst.FlowReturn.OK
 
 

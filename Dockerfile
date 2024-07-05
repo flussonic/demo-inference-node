@@ -43,4 +43,5 @@ ENV GST_PLUGIN_PATH=/usr/local/lib/gstreamer-1.0/
 
 RUN apt update && \
   DEBIAN_FRONTEND=noninteractive apt install -y \
-  python3-opencv
+  python3-opencv \
+  opencv-data

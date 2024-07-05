@@ -7,6 +7,7 @@ RUN apt update && \
   python3-pip \
   python-gi-dev \
   python3-numpy \
+  python3-urllib3 \
   wget \
   vim-tiny \
   meson
@@ -45,3 +46,6 @@ RUN apt update && \
   DEBIAN_FRONTEND=noninteractive apt install -y \
   python3-opencv \
   opencv-data
+
+ENV CONFIG_EXTERNAL=""
+CMD "./main.py"

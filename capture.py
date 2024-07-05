@@ -17,7 +17,7 @@ class Episode(object):
 
 	def __init__(self, **kwargs):
 		self.episode_id = kwargs['episode_id']
-		self.meta = kwargs['media']
+		self.media = kwargs['media']
 		self.opened_at = kwargs['opened_at']
 		self.updated_at = kwargs['updated_at']
 		self.payload = ""
@@ -37,10 +37,11 @@ class Capture(object):
 		Capture.episodes.append(episode)
 		if len(Capture.episodes) > Capture.episodes_limit:
 			Capture.episodes = Capture.episodes[1:]
-		
 
-	def __init__(self, rtsp_url):
-		self.rtsp_url = rtsp_url
+
+	def __init__(self, spec):
+		self.rtsp_url = spec.url
+		self.name = spec.name
 
 
 	def run(self):

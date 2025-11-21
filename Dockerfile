@@ -39,7 +39,7 @@ RUN GSTREAMER_VERSION=$(gst-launch-1.0 --version | grep version | tr -s ' ' '\n'
     && ninja -C build install \
     && mv $(dirname $(find /usr -name "libgstpython.so")) /usr/local/lib
 
-WORKDIR /src
+WORKDIR /src 
 ENV GST_PLUGIN_PATH=/usr/local/lib/gstreamer-1.0/
 
 RUN apt update && \
@@ -47,5 +47,8 @@ RUN apt update && \
   python3-opencv \
   opencv-data
 
+# Copy application files
+COPY *.py /src/
+
 ENV CONFIG_EXTERNAL=""
-CMD "./main.py"
+CMD ["python3", "main.py"]

@@ -49,6 +49,7 @@ RUN apt update && \
 
 # Copy application files
 COPY *.py /src/
+EXPOSE 8020
 
 ENV CONFIG_EXTERNAL=""
 CMD ["python3", "main.py"]

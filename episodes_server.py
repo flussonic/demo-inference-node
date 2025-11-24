@@ -120,6 +120,7 @@ def run_http(episodes, port, manager=None, server_version="1.0.0", build=1, serv
 	HttpGetHandler.started_at = int(time.time())
 	server_address = ('', port)
 	httpd = server_class(server_address, handler_class)
+	print(f"[EpisodesServer] HTTP server started on port {port}")
 	try:
 		httpd.serve_forever()
 	except KeyboardInterrupt:

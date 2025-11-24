@@ -17,9 +17,9 @@ class QrRecognizer(Capture):
 	def __init__(self, spec):
 		super().__init__(spec)
 		self.started = False
-		# Track active QR code episodes: {qr_data: episode_id}
-		# This allows us to update existing episodes and close them when QR disappears
-		self.active_qr_episodes = {}
+		# Track active QR codes: {qr_data: {'opened_at': timestamp_ms, 'first_seen_at': timestamp_ms}}
+		# Episodes are created only when QR code disappears
+		self.active_qr_codes = {}
 
 	def preprocess_image(self, image):
 		"""Preprocess image to improve QR code detection"""
@@ -52,8 +52,12 @@ class QrRecognizer(Capture):
 		else:
 			self._qr_check_count = 1
 
-		if self._qr_check_count % 100 == 0:
+		# Log QR detection attempts more frequently for debugging
+		if self._qr_check_count == 1:
+			print(f"[{self.name}] Starting QR code detection, image shape: {image.shape}")
+		elif self._qr_check_count % 30 == 0:
 			print(f"[{self.name}] QR detection attempt #{self._qr_check_count}, retval={retval}, decoded_info count={len(decoded_info) if decoded_info else 0}")
+		
 		if not retval or not decoded_info or len(decoded_info) == 0:
 			retval, decoded_info, points, _ = detector.detectAndDecodeMulti(gray)
 
@@ -68,45 +72,42 @@ class QrRecognizer(Capture):
 			for qr_data in valid_qr_codes:
 				current_frame_qr_codes.add(qr_data)
 
-				if qr_data in self.active_qr_episodes:
-					# QR code already has an active episode - update it
-					episode_id = self.active_qr_episodes[qr_data]
-					updated_episode = Capture.update_episode(
-						episode_id,
-						updated_at=int(utc_ns/1e6)
-					)
-					if updated_episode:
-						print(f"[{self.name}] Updated episode for QR: {qr_data} (episode_id: {episode_id})")
-				else:
-					# New QR code detected - create new episode
-					episode_id = int(utc_ns/1e3)
-					self.active_qr_episodes[qr_data] = episode_id
+				if qr_data not in self.active_qr_codes:
+					# New QR code detected - track it but don't create episode yet
+					opened_at_ms = int(utc_ns/1e6)
+					self.active_qr_codes[qr_data] = {
+						'opened_at': opened_at_ms,
+						'first_seen_at': opened_at_ms
+					}
 					qr_codes[qr_data] = (qr_data, timestamp)
-					print(f"[{self.name}] NEW QR CODE DETECTED: {qr_data} at {timestamp} (episode_id: {episode_id})")
-					return Episode(
-						episode_id=episode_id,
-						media=self.name,
-						opened_at=int(utc_ns/1e6),
-						started_at=int(utc_ns/1e6),  # started_at = opened_at
-						updated_at=int(utc_ns/1e6),
-						episode_type=Episode.QR_CODE,
-						payload={'qr_url': qr_data}
-					)
+					print(f"[{self.name}] NEW QR CODE DETECTED: {qr_data} at {timestamp}")
 
-		disappeared_qr_codes = set(self.active_qr_episodes.keys()) - current_frame_qr_codes
+		# Check for disappeared QR codes - create episodes when they disappear
+		disappeared_qr_codes = set(self.active_qr_codes.keys()) - current_frame_qr_codes
 		if disappeared_qr_codes:
 			for qr_data in disappeared_qr_codes:
-				episode_id = self.active_qr_episodes[qr_data]
-				# Close the episode
-				closed_episode = Capture.update_episode(
-					episode_id,
-					closed_at=int(utc_ns/1e6),
-					updated_at=int(utc_ns/1e6)
+				qr_info = self.active_qr_codes[qr_data]
+				opened_at_ms = qr_info['opened_at']
+				closed_at_ms = int(utc_ns/1e6)
+				episode_id = int(utc_ns/1e3)
+				
+				# Create episode when QR code disappears
+				episode = Episode(
+					episode_id=episode_id,
+					media=self.name,
+					opened_at=opened_at_ms,
+					started_at=opened_at_ms,  # started_at = opened_at
+					closed_at=closed_at_ms,
+					updated_at=closed_at_ms,
+					episode_type=Episode.QR_CODE,
+					payload={'qr_url': qr_data}
 				)
-				if closed_episode:
-					print(f"[{self.name}] QR CODE DISAPPEARED: {qr_data} at {timestamp}, closed episode {episode_id}")
-				# Remove from active episodes
-				del self.active_qr_episodes[qr_data]
+				print(f"[{self.name}] QR CODE DISAPPEARED: {qr_data} at {timestamp}, created episode {episode_id} (opened: {opened_at_ms}, closed: {closed_at_ms})")
+				
+				# Remove from active QR codes
+				del self.active_qr_codes[qr_data]
+				
+				return episode
 
 		return None
 
@@ -118,7 +119,16 @@ class MyManager(Manager):
 		return QrRecognizer(spec)
 
 
-manager = MyManager(os.environ['CONFIG_EXTERNAL'])
+print("[Main] Starting inference node...")
+config_external = os.environ.get('CONFIG_EXTERNAL')
+if not config_external:
+	print("[Main] ERROR: CONFIG_EXTERNAL environment variable is not set!")
+	exit(1)
+print(f"[Main] CONFIG_EXTERNAL: {config_external}")
+
+manager = MyManager(config_external)
+print("[Main] Manager created, starting manager thread...")
 t1 = threading.Thread(target=manager.run, args=())
 t1.start()
+print("[Main] Manager thread started, starting HTTP server on port 8020...")
 run_http(Capture.episodes, 8020, manager=manager)
